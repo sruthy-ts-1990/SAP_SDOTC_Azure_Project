@@ -1,0 +1,20 @@
+{
+  "config": {
+    "required_SAP_files": [
+      "VBAK.CSV",
+      "VBAP.CSV",
+      "LIKP.CSV",
+      "LIPS.CSV",
+      "VBRK.CSV",
+      "VBRP.CSV",
+      "VBFA.CSV",
+      "KNA1.CSV",
+      "KNVV.CSV",
+      "MARA.CSV",
+      "MAKT.CSV",
+      "MVKE.CSV",
+      "TCURR.CSV",
+      "TCURF.CSV"
+    ]
+  }
+}

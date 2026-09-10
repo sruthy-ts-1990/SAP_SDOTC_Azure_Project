@@ -1,0 +1,1517 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "factoryName": {
+            "type": "string",
+            "metadata": "Data Factory name",
+            "defaultValue": "sdotc-dev-adf"
+        },
+        "LS_Blob_Storage_connectionString": {
+            "type": "secureString",
+            "metadata": "Secure string for 'connectionString' of 'LS_Blob_Storage'"
+        },
+        "LS_Data_Lake_accountKey": {
+            "type": "secureString",
+            "metadata": "Secure string for 'accountKey' of 'LS_Data_Lake'"
+        },
+        "LS_Data_Lake_properties_typeProperties_url": {
+            "type": "string",
+            "defaultValue": "https://sdotcdevsa.dfs.core.windows.net/"
+        },
+        "LS_Azure_SQL_DB_properties_typeProperties_server": {
+            "type": "string",
+            "defaultValue": "sdotc-dev-sql.database.windows.net"
+        },
+        "LS_Azure_SQL_DB_properties_typeProperties_database": {
+            "type": "string",
+            "defaultValue": "sdotc-dev-sqldb"
+        },
+        "LS_Azure_SQL_DB_properties_typeProperties_userName": {
+            "type": "string",
+            "defaultValue": "sqladmin"
+        },
+        "LS_KeyVault_properties_typeProperties_baseUrl": {
+            "type": "string",
+            "defaultValue": "https://sdotc-dev-kv.vault.azure.net/"
+        }
+    },
+    "variables": {
+        "factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+    },
+    "resources": [
+        {
+            "name": "[concat(parameters('factoryName'), '/Daily_Trigger')]",
+            "type": "Microsoft.DataFactory/factories/triggers",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "runtimeState": "Started",
+                "pipelines": [
+                    {
+                        "pipelineReference": {
+                            "referenceName": "SAP_Files_to_Bronze",
+                            "type": "PipelineReference"
+                        },
+                        "parameters": {}
+                    }
+                ],
+                "type": "ScheduleTrigger",
+                "typeProperties": {
+                    "recurrence": {
+                        "frequency": "Day",
+                        "interval": 1,
+                        "startTime": "2026-09-02T18:07:00",
+                        "timeZone": "Arab Standard Time",
+                        "schedule": {
+                            "minutes": [
+                                0
+                            ],
+                            "hours": [
+                                2
+                            ]
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/pipelines/SAP_Files_to_Bronze')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/LS_Blob_Storage')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "AzureBlobStorage",
+                "typeProperties": {
+                    "connectionString": "[parameters('LS_Blob_Storage_connectionString')]"
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/LS_Data_Lake')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "AzureBlobFS",
+                "typeProperties": {
+                    "url": "[parameters('LS_Data_Lake_properties_typeProperties_url')]",
+                    "accountKey": {
+                        "type": "SecureString",
+                        "value": "[parameters('LS_Data_Lake_accountKey')]"
+                    }
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/LS_Azure_SQL_DB')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "SqlServer",
+                "typeProperties": {
+                    "server": "[parameters('LS_Azure_SQL_DB_properties_typeProperties_server')]",
+                    "database": "[parameters('LS_Azure_SQL_DB_properties_typeProperties_database')]",
+                    "encrypt": "mandatory",
+                    "trustServerCertificate": false,
+                    "authenticationType": "SQL",
+                    "userName": "[parameters('LS_Azure_SQL_DB_properties_typeProperties_userName')]"
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/LS_KeyVault')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "AzureKeyVault",
+                "typeProperties": {
+                    "baseUrl": "[parameters('LS_KeyVault_properties_typeProperties_baseUrl')]"
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/SAP_Files_to_Bronze')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "description": "This pipeline copies the files in blob storage to Bronze containerplaced in ADLS ",
+                "activities": [
+                    {
+                        "name": "LookupFileNames",
+                        "description": "Get List of file names as per Business Requirement",
+                        "type": "Lookup",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 2,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "source": {
+                                "type": "JsonSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobStorageReadSettings",
+                                    "recursive": true,
+                                    "enablePartitionDiscovery": false
+                                },
+                                "formatSettings": {
+                                    "type": "JsonReadSettings"
+                                }
+                            },
+                            "dataset": {
+                                "referenceName": "DS_Config_json",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            },
+                            "firstRowOnly": false
+                        }
+                    },
+                    {
+                        "name": "SetFileNames",
+                        "type": "SetVariable",
+                        "dependsOn": [
+                            {
+                                "activity": "LookupFileNames",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [
+                            {
+                                "name": "fileList",
+                                "value": "@variables('pFileNames')"
+                            }
+                        ],
+                        "typeProperties": {
+                            "variableName": "pFileNames",
+                            "value": {
+                                "value": "@activity('LookupFileNames').output.value[0].config.required_SAP_files",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    {
+                        "name": "Get Metadata_raw",
+                        "type": "GetMetadata",
+                        "dependsOn": [
+                            {
+                                "activity": "SetFileNames",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "policy": {
+                            "timeout": "0.12:00:00",
+                            "retry": 2,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [],
+                        "typeProperties": {
+                            "dataset": {
+                                "referenceName": "DS_Metadata_json",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            },
+                            "fieldList": [
+                                "childItems"
+                            ],
+                            "storeSettings": {
+                                "type": "AzureBlobStorageReadSettings",
+                                "recursive": true,
+                                "enablePartitionDiscovery": false
+                            },
+                            "formatSettings": {
+                                "type": "JsonReadSettings"
+                            }
+                        }
+                    },
+                    {
+                        "name": "ForEachFiles",
+                        "type": "ForEach",
+                        "dependsOn": [
+                            {
+                                "activity": "Get Metadata_raw",
+                                "dependencyConditions": [
+                                    "Succeeded"
+                                ]
+                            }
+                        ],
+                        "userProperties": [],
+                        "typeProperties": {
+                            "items": {
+                                "value": "@activity('Get Metadata_raw').output.childItems",
+                                "type": "Expression"
+                            },
+                            "isSequential": true,
+                            "activities": [
+                                {
+                                    "name": "If file required",
+                                    "type": "IfCondition",
+                                    "dependsOn": [],
+                                    "userProperties": [
+                                        {
+                                            "name": "fileName",
+                                            "value": "@item().name"
+                                        }
+                                    ],
+                                    "typeProperties": {
+                                        "expression": {
+                                            "value": "@contains(variables('pFileNames'), toUpper(item().name))",
+                                            "type": "Expression"
+                                        },
+                                        "ifTrueActivities": [
+                                            {
+                                                "name": "Copy CSV to Bronze",
+                                                "description": "Copy CSV files in raw folder to Bronze folder as parquet files",
+                                                "type": "Copy",
+                                                "dependsOn": [],
+                                                "policy": {
+                                                    "timeout": "0.12:00:00",
+                                                    "retry": 2,
+                                                    "retryIntervalInSeconds": 30,
+                                                    "secureOutput": false,
+                                                    "secureInput": false
+                                                },
+                                                "userProperties": [],
+                                                "typeProperties": {
+                                                    "source": {
+                                                        "type": "DelimitedTextSource",
+                                                        "additionalColumns": [
+                                                            {
+                                                                "name": "_ingested_at",
+                                                                "value": {
+                                                                    "value": "@utcNow()",
+                                                                    "type": "Expression"
+                                                                }
+                                                            },
+                                                            {
+                                                                "name": "_source_file",
+                                                                "value": {
+                                                                    "value": "@item().name",
+                                                                    "type": "Expression"
+                                                                }
+                                                            },
+                                                            {
+                                                                "name": "_pipeline_run_id",
+                                                                "value": {
+                                                                    "value": "@pipeline().RunId",
+                                                                    "type": "Expression"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "storeSettings": {
+                                                            "type": "AzureBlobStorageReadSettings",
+                                                            "recursive": true,
+                                                            "enablePartitionDiscovery": false
+                                                        },
+                                                        "formatSettings": {
+                                                            "type": "DelimitedTextReadSettings"
+                                                        }
+                                                    },
+                                                    "sink": {
+                                                        "type": "ParquetSink",
+                                                        "storeSettings": {
+                                                            "type": "AzureBlobFSWriteSettings"
+                                                        },
+                                                        "formatSettings": {
+                                                            "type": "ParquetWriteSettings"
+                                                        }
+                                                    },
+                                                    "enableStaging": false,
+                                                    "translator": {
+                                                        "type": "TabularTranslator",
+                                                        "typeConversion": true,
+                                                        "typeConversionSettings": {
+                                                            "allowDataTruncation": true,
+                                                            "treatBooleanAsNumber": false
+                                                        }
+                                                    }
+                                                },
+                                                "inputs": [
+                                                    {
+                                                        "referenceName": "DS_SAP_file_csv",
+                                                        "type": "DatasetReference",
+                                                        "parameters": {
+                                                            "pFileName": "@item().name"
+                                                        }
+                                                    }
+                                                ],
+                                                "outputs": [
+                                                    {
+                                                        "referenceName": "DS_Bronze_parquet",
+                                                        "type": "DatasetReference",
+                                                        "parameters": {
+                                                            "pFolderName": "@split(item().name, '.')[0]"
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "name": "Pipeline Log Success",
+                                                "type": "SqlServerStoredProcedure",
+                                                "dependsOn": [
+                                                    {
+                                                        "activity": "Copy CSV to Bronze",
+                                                        "dependencyConditions": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                ],
+                                                "policy": {
+                                                    "timeout": "0.12:00:00",
+                                                    "retry": 3,
+                                                    "retryIntervalInSeconds": 30,
+                                                    "secureOutput": false,
+                                                    "secureInput": false
+                                                },
+                                                "userProperties": [],
+                                                "typeProperties": {
+                                                    "storedProcedureName": "[[dbo].[usp_LogPipelineLoad]",
+                                                    "storedProcedureParameters": {
+                                                        "ErrorMessage": {
+                                                            "value": null,
+                                                            "type": "String"
+                                                        },
+                                                        "FileName": {
+                                                            "value": "@item().name",
+                                                            "type": "String"
+                                                        },
+                                                        "LoadDate": {
+                                                            "value": "@utcNow()",
+                                                            "type": "DateTime"
+                                                        },
+                                                        "PipelineName": {
+                                                            "value": "@pipeline().Pipeline",
+                                                            "type": "String"
+                                                        },
+                                                        "RowCount": {
+                                                            "value": "@activity('Copy CSV to Bronze').output.rowsCopied",
+                                                            "type": "Int32"
+                                                        },
+                                                        "RunID": {
+                                                            "value": "@pipeline().RunId",
+                                                            "type": "String"
+                                                        },
+                                                        "Status": {
+                                                            "value": "Success",
+                                                            "type": "String"
+                                                        },
+                                                        "TableName": {
+                                                            "value": "@split(item().name, '.')[0]",
+                                                            "type": "String"
+                                                        }
+                                                    }
+                                                },
+                                                "linkedServiceName": {
+                                                    "referenceName": "LS_Azure_SQL_DB",
+                                                    "type": "LinkedServiceReference"
+                                                }
+                                            },
+                                            {
+                                                "name": "Pipeline Log Failure",
+                                                "type": "SqlServerStoredProcedure",
+                                                "dependsOn": [
+                                                    {
+                                                        "activity": "Copy CSV to Bronze",
+                                                        "dependencyConditions": [
+                                                            "Failed"
+                                                        ]
+                                                    }
+                                                ],
+                                                "policy": {
+                                                    "timeout": "0.12:00:00",
+                                                    "retry": 3,
+                                                    "retryIntervalInSeconds": 30,
+                                                    "secureOutput": false,
+                                                    "secureInput": false
+                                                },
+                                                "userProperties": [],
+                                                "typeProperties": {
+                                                    "storedProcedureName": "[[dbo].[usp_LogPipelineLoad]",
+                                                    "storedProcedureParameters": {
+                                                        "ErrorMessage": {
+                                                            "value": "@activity('Copy CSV to Bronze').Error.Message",
+                                                            "type": "String"
+                                                        },
+                                                        "FileName": {
+                                                            "value": "@item().name",
+                                                            "type": "String"
+                                                        },
+                                                        "LoadDate": {
+                                                            "value": "@utcNow()",
+                                                            "type": "DateTime"
+                                                        },
+                                                        "PipelineName": {
+                                                            "value": "@pipeline().Pipeline",
+                                                            "type": "String"
+                                                        },
+                                                        "RowCount": {
+                                                            "value": {
+                                                                "value": "0",
+                                                                "type": "Expression"
+                                                            },
+                                                            "type": "Int32"
+                                                        },
+                                                        "RunID": {
+                                                            "value": "@pipeline().RunId",
+                                                            "type": "String"
+                                                        },
+                                                        "Status": {
+                                                            "value": "Failure",
+                                                            "type": "String"
+                                                        },
+                                                        "TableName": {
+                                                            "value": "@split(item().name, '.')[0]",
+                                                            "type": "String"
+                                                        }
+                                                    }
+                                                },
+                                                "linkedServiceName": {
+                                                    "referenceName": "LS_Azure_SQL_DB",
+                                                    "type": "LinkedServiceReference"
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "policy": {
+                    "elapsedTimeMetric": {}
+                },
+                "variables": {
+                    "pFileNames": {
+                        "type": "Array"
+                    }
+                },
+                "annotations": [],
+                "lastPublishTime": "2026-08-30T09:58:24Z"
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/datasets/DS_Config_json')]",
+                "[concat(variables('factoryId'), '/datasets/DS_Metadata_json')]",
+                "[concat(variables('factoryId'), '/datasets/DS_SAP_file_csv')]",
+                "[concat(variables('factoryId'), '/datasets/DS_Bronze_parquet')]",
+                "[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL_DB')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_SAP_file_csv')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Blob_Storage",
+                    "type": "LinkedServiceReference"
+                },
+                "parameters": {
+                    "pFileName": {
+                        "type": "string"
+                    }
+                },
+                "annotations": [],
+                "type": "DelimitedText",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobStorageLocation",
+                        "fileName": {
+                            "value": "@dataset().pFileName",
+                            "type": "Expression"
+                        },
+                        "container": "rawdata"
+                    },
+                    "columnDelimiter": ",",
+                    "escapeChar": "\\",
+                    "firstRowAsHeader": true,
+                    "quoteChar": "\""
+                },
+                "schema": [
+                    {
+                        "name": "mandt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kunnr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "land1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "name1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "name2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ort01",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pstlz",
+                        "type": "String"
+                    },
+                    {
+                        "name": "regio",
+                        "type": "String"
+                    },
+                    {
+                        "name": "sortl",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stras",
+                        "type": "String"
+                    },
+                    {
+                        "name": "telf1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "telfx",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xcpdk",
+                        "type": "String"
+                    },
+                    {
+                        "name": "adrnr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "mcod1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "mcod2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "mcod3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "anred",
+                        "type": "String"
+                    },
+                    {
+                        "name": "aufsd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bahne",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bahns",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bbbnr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bbsnr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "begru",
+                        "type": "String"
+                    },
+                    {
+                        "name": "brsch",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bubkz",
+                        "type": "String"
+                    },
+                    {
+                        "name": "datlt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "erdat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ernam",
+                        "type": "String"
+                    },
+                    {
+                        "name": "exabl",
+                        "type": "String"
+                    },
+                    {
+                        "name": "faksd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "fiskn",
+                        "type": "String"
+                    },
+                    {
+                        "name": "knazk",
+                        "type": "String"
+                    },
+                    {
+                        "name": "knrza",
+                        "type": "String"
+                    },
+                    {
+                        "name": "konzs",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ktokd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kukla",
+                        "type": "String"
+                    },
+                    {
+                        "name": "lifnr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "lifsd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "locco",
+                        "type": "String"
+                    },
+                    {
+                        "name": "loevm",
+                        "type": "String"
+                    },
+                    {
+                        "name": "name3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "name4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "niels",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ort02",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pfach",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pstl2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "counc",
+                        "type": "String"
+                    },
+                    {
+                        "name": "cityc",
+                        "type": "String"
+                    },
+                    {
+                        "name": "rpmkr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "sperr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "spras",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stkza",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stkzu",
+                        "type": "String"
+                    },
+                    {
+                        "name": "telbx",
+                        "type": "String"
+                    },
+                    {
+                        "name": "telf2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "teltx",
+                        "type": "String"
+                    },
+                    {
+                        "name": "telx1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "lzone",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xzemp",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vbund",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stceg",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "gform",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bran1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bran2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bran3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bran4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "bran5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ekont",
+                        "type": "String"
+                    },
+                    {
+                        "name": "umsat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "umjah",
+                        "type": "String"
+                    },
+                    {
+                        "name": "uwaer",
+                        "type": "String"
+                    },
+                    {
+                        "name": "jmzah",
+                        "type": "String"
+                    },
+                    {
+                        "name": "jmjah",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr6",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr7",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr8",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr9",
+                        "type": "String"
+                    },
+                    {
+                        "name": "katr10",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stkzn",
+                        "type": "String"
+                    },
+                    {
+                        "name": "umsa1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "txjcd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "periv",
+                        "type": "String"
+                    },
+                    {
+                        "name": "abrvw",
+                        "type": "String"
+                    },
+                    {
+                        "name": "inspbydebi",
+                        "type": "String"
+                    },
+                    {
+                        "name": "inspatdebi",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ktocd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pfort",
+                        "type": "String"
+                    },
+                    {
+                        "name": "werks",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dtams",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dtaws",
+                        "type": "String"
+                    },
+                    {
+                        "name": "duefl",
+                        "type": "String"
+                    },
+                    {
+                        "name": "hzuor",
+                        "type": "String"
+                    },
+                    {
+                        "name": "sperz",
+                        "type": "String"
+                    },
+                    {
+                        "name": "etikg",
+                        "type": "String"
+                    },
+                    {
+                        "name": "civve",
+                        "type": "String"
+                    },
+                    {
+                        "name": "milve",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kdkg1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kdkg2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kdkg3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kdkg4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "kdkg5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xknza",
+                        "type": "String"
+                    },
+                    {
+                        "name": "fityp",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcdt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "stcd6",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xicms",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xxipi",
+                        "type": "String"
+                    },
+                    {
+                        "name": "xsubt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "cfopc",
+                        "type": "String"
+                    },
+                    {
+                        "name": "txlw1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "txlw2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ccc01",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ccc02",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ccc03",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ccc04",
+                        "type": "String"
+                    },
+                    {
+                        "name": "cassd",
+                        "type": "String"
+                    },
+                    {
+                        "name": "knurl",
+                        "type": "String"
+                    },
+                    {
+                        "name": "j_1kfrepre",
+                        "type": "String"
+                    },
+                    {
+                        "name": "j_1kftbus",
+                        "type": "String"
+                    },
+                    {
+                        "name": "j_1kftind",
+                        "type": "String"
+                    },
+                    {
+                        "name": "confs",
+                        "type": "String"
+                    },
+                    {
+                        "name": "updat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "uptim",
+                        "type": "String"
+                    },
+                    {
+                        "name": "nodel",
+                        "type": "String"
+                    },
+                    {
+                        "name": "dear6",
+                        "type": "String"
+                    },
+                    {
+                        "name": "cvp_xblck",
+                        "type": "String"
+                    },
+                    {
+                        "name": "suframa",
+                        "type": "String"
+                    },
+                    {
+                        "name": "rg",
+                        "type": "String"
+                    },
+                    {
+                        "name": "exp",
+                        "type": "String"
+                    },
+                    {
+                        "name": "uf",
+                        "type": "String"
+                    },
+                    {
+                        "name": "rgdate",
+                        "type": "String"
+                    },
+                    {
+                        "name": "ric",
+                        "type": "String"
+                    },
+                    {
+                        "name": "rne",
+                        "type": "String"
+                    },
+                    {
+                        "name": "rnedate",
+                        "type": "String"
+                    },
+                    {
+                        "name": "cnae",
+                        "type": "String"
+                    },
+                    {
+                        "name": "legalnat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "crtn",
+                        "type": "String"
+                    },
+                    {
+                        "name": "icmstaxpay",
+                        "type": "String"
+                    },
+                    {
+                        "name": "indtyp",
+                        "type": "String"
+                    },
+                    {
+                        "name": "tdt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "comsize",
+                        "type": "String"
+                    },
+                    {
+                        "name": "decregpc",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_palhgt",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_pal_ul",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_pk_mat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_matpal",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_i_no_lyr",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_one_mat",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_one_sort",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_uld_side",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_load_pref",
+                        "type": "String"
+                    },
+                    {
+                        "name": "vso_r_dpoint",
+                        "type": "String"
+                    },
+                    {
+                        "name": "alc",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pmt_office",
+                        "type": "String"
+                    },
+                    {
+                        "name": "fee_schedule",
+                        "type": "String"
+                    },
+                    {
+                        "name": "duns",
+                        "type": "String"
+                    },
+                    {
+                        "name": "duns4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "sam_ue_id",
+                        "type": "String"
+                    },
+                    {
+                        "name": "sam_eft_ind",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psofg",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psois",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pson1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pson2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "pson3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psovn",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psotl",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psohs",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psost",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psoo1",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psoo2",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psoo3",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psoo4",
+                        "type": "String"
+                    },
+                    {
+                        "name": "psoo5",
+                        "type": "String"
+                    },
+                    {
+                        "name": "operation_flag",
+                        "type": "String"
+                    },
+                    {
+                        "name": "is_deleted",
+                        "type": "String"
+                    },
+                    {
+                        "name": "recordstamp",
+                        "type": "String"
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Blob_Storage')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Config_json')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Blob_Storage",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "Json",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobStorageLocation",
+                        "fileName": "config.json",
+                        "container": "configurations"
+                    }
+                },
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "required_SAP_files": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Blob_Storage')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Metadata_json')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Blob_Storage",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "Json",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobStorageLocation",
+                        "container": "rawdata"
+                    }
+                },
+                "schema": {}
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Blob_Storage')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Bronze_parquet')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Data_Lake",
+                    "type": "LinkedServiceReference"
+                },
+                "parameters": {
+                    "pFolderName": {
+                        "type": "string"
+                    }
+                },
+                "annotations": [],
+                "type": "Parquet",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobFSLocation",
+                        "folderPath": {
+                            "value": "@{dataset().pFolderName}/@{formatDateTime(utcNow(),'yyyy-MM-dd')}",
+                            "type": "Expression"
+                        },
+                        "fileSystem": "bronze"
+                    },
+                    "compressionCodec": "snappy"
+                },
+                "schema": []
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Data_Lake')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Bronze_Folder_Metadata_json')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Data_Lake",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "Json",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobFSLocation",
+                        "fileSystem": "bronze"
+                    }
+                },
+                "schema": {}
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Data_Lake')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Bronze_Child_Metadata_json')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Data_Lake",
+                    "type": "LinkedServiceReference"
+                },
+                "parameters": {
+                    "pFolderName": {
+                        "type": "string"
+                    }
+                },
+                "annotations": [],
+                "type": "Json",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobFSLocation",
+                        "folderPath": {
+                            "value": "@dataset().pFolderName",
+                            "type": "Expression"
+                        },
+                        "fileSystem": "bronze"
+                    }
+                },
+                "schema": {}
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Data_Lake')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/DS_Watermark_json')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "LS_Azure_SQL_DB",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "SqlServerTable",
+                "schema": [
+                    {
+                        "name": "table_name",
+                        "type": "varchar"
+                    },
+                    {
+                        "name": "watermark_column",
+                        "type": "varchar"
+                    },
+                    {
+                        "name": "last_watermark",
+                        "type": "datetime2",
+                        "scale": 7
+                    },
+                    {
+                        "name": "updated_at",
+                        "type": "datetime2",
+                        "scale": 7
+                    }
+                ],
+                "typeProperties": {
+                    "schema": "dbo",
+                    "table": "etl_watermark"
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL_DB')]"
+            ]
+        }
+    ]
+}
